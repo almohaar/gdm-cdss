@@ -64,10 +64,12 @@ export default function RegisterPage() {
         }
       }
 
+      toast.success("Registered Successfully!")
+
       // Redirect by role
-      if (data.role === 'CLINICIAN') router.push('/dashboard/clinician');
-      else if (data.role === 'ADMIN') router.push('/dashboard/admin');
-      else router.push('/dashboard/patient');
+      if (data.role === 'CLINICIAN') router.push('/gdm/access');
+      else if (data.role === 'ADMIN') router.push('/gdm/access');
+      else router.push('/gdm/access');
 
     } catch (err) {
       console.error(err);

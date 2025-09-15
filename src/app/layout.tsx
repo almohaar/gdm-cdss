@@ -31,7 +31,7 @@ export default function RootLayout({
         )}
       >
        <SupabaseProvider>{children}</SupabaseProvider>
-        <Toaster />
+        <Toaster position='top-center' />
       </body>
     </html>
   );

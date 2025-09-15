@@ -41,9 +41,11 @@ export default function LoginPage() {
       // optional: fetch user metadata/role
       const role = loginData.user?.user_metadata?.role ?? 'PATIENT';
 
-      if (role === 'CLINICIAN') router.push('/dashboard/clinician');
-      else if (role === 'ADMIN') router.push('/dashboard/admin');
-      else router.push('/dashboard/patient');
+      toast.success("Logged in successfully")
+
+      if (role === 'CLINICIAN') router.push('/gdm/access');
+      else if (role === 'ADMIN') router.push('/gdm/access');
+      else router.push('/gdm/access');
     } catch (err) {
       console.error(err);
       toast.error('Login failed');
