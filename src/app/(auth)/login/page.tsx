@@ -12,6 +12,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { LoginInput, loginSchema } from '../../../lib/validators/authSchemas';
+// import { supabaseBrowser } from '@/lib/supabase/client';
+import { toast } from 'sonner';
+import { createClient } from '../../../lib/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,24 +25,28 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginInput) => {
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error ?? JSON.stringify(json));
+      const supabase = createClient();
+      const { data: loginData, error } = await supabase.auth.signInWithPassword(
+        {
+          email: data.email,
+          password: data.password,
+        },
+      );
+
+      if (error) {
+        toast.error(error.message);
         return;
       }
-      if (json.token) localStorage.setItem('token', json.token);
-      const role = json.user?.role ?? 'PATIENT';
+
+      // optional: fetch user metadata/role
+      const role = loginData.user?.user_metadata?.role ?? 'PATIENT';
+
       if (role === 'CLINICIAN') router.push('/dashboard/clinician');
       else if (role === 'ADMIN') router.push('/dashboard/admin');
       else router.push('/dashboard/patient');
     } catch (err) {
       console.error(err);
-      alert('Login failed');
+      toast.error('Login failed');
     }
   };
 

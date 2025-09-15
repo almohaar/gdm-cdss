@@ -1,65 +1,39 @@
-// middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
-/**
- * Paths we want to protect (prefix matching).
- * Adjust to match your app.
- */
-const PROTECTED_PATHS = [
-  '/dashboard',
-  '/gdm',
-  '/patients',
-  '/settings',
-  '/app',
-];
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next({ request: { headers: req.headers } });
 
-/**
- * Allowlist of paths to skip middleware checks
- */
-const PUBLIC_PATHS = [
-  '/auth/login',
-  '/auth/register',
-  '/api/auth/login',
-  '/api/auth/register',
-  '/api/auth/me',
-  '/api/auth/logout',
-  '/',
-  '/_next',
-  '/_static',
-  '/favicon.ico',
-];
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options);
+          });
+        },
+      },
+    },
+  );
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  // Skip static and public assets quickly
-  for (const p of PUBLIC_PATHS) {
-    if (pathname === p || pathname.startsWith(p)) {
-      return NextResponse.next();
-    }
+  // Protect dashboard routes
+  if (req.nextUrl.pathname.startsWith('/dashboard') && !session) {
+    return NextResponse.redirect(new URL('/auth/login', req.url));
   }
 
-  // Only protect the defined prefixes
-  const shouldProtect = PROTECTED_PATHS.some(p => pathname.startsWith(p));
-  if (!shouldProtect) return NextResponse.next();
-
-  // Read cookie
-  const token = req.cookies.get('token')?.value;
-  if (!token) {
-    const loginUrl = new URL('/auth/login', req.url);
-    loginUrl.searchParams.set('from', pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // token exists — allow the request through. Detailed role checks should happen server-side.
-  return NextResponse.next();
+  return res;
 }
 
-/**
- * Configure matcher to run middleware on relevant paths
- * (optional — middleware will run by default: adjust to improve perf)
- */
+// Only run middleware on relevant paths for perf
 export const config = {
   matcher: [
     '/dashboard/:path*',

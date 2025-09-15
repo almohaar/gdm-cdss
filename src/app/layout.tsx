@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
+import { SupabaseProvider } from '../components/AppWrapper';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -29,7 +30,7 @@ export default function RootLayout({
           inter.variable,
         )}
       >
-        {children}
+       <SupabaseProvider>{children}</SupabaseProvider>
         <Toaster />
       </body>
     </html>

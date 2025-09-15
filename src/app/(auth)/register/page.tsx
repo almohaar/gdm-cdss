@@ -20,6 +20,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { RegisterInput, registerSchema } from '@/lib/validators/authSchemas';
+import { createClient } from '../../../lib/supabase/client';
+import { toast } from 'sonner';
+// import { supabaseBrowser } from '@/lib/supabase/client';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -34,25 +37,41 @@ export default function RegisterPage() {
 
   const onSubmit = async (data: RegisterInput) => {
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+      const supabase = createClient();
+
+      const { data: signUpData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
       });
-      const json = await res.json();
-      if (!res.ok) {
-        alert(json.error ?? JSON.stringify(json));
+
+      if (error) {
+        toast.error(error.message);
         return;
       }
-      if (json.token) localStorage.setItem('token', json.token);
 
-      const role = json.user?.role ?? 'PATIENT';
-      if (role === 'CLINICIAN') router.push('/dashboard/clinician');
-      else if (role === 'ADMIN') router.push('/dashboard/admin');
+      // Insert into profiles
+      if (signUpData.user) {
+        const { error: profileError } = await supabase.from('profiles').insert({
+          id: signUpData.user.id,
+          name: data.name,
+          role: data.role,
+        });
+
+        if (profileError) {
+          console.error(profileError);
+          toast.error('Failed to save profile');
+          return;
+        }
+      }
+
+      // Redirect by role
+      if (data.role === 'CLINICIAN') router.push('/dashboard/clinician');
+      else if (data.role === 'ADMIN') router.push('/dashboard/admin');
       else router.push('/dashboard/patient');
+
     } catch (err) {
       console.error(err);
-      alert('Registration failed');
+      toast.error('Registration failed');
     }
   };
 
@@ -60,15 +79,15 @@ export default function RegisterPage() {
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 px-4 sm:px-6 lg:px-8">
       {/* Background overlay */}
       <div className="absolute inset-0">
-              <Image
-                src="/auth-hero.webp"
-                alt="Background"
-                fill
-                className="object-cover filter blur-sm brightness-75"
-                priority
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/80" />
-            </div>
+        <Image
+          src="/auth-hero.webp"
+          alt="Background"
+          fill
+          className="object-cover filter blur-sm brightness-75"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/80" />
+      </div>
 
       {/* Animated Card */}
       <motion.div
@@ -188,7 +207,7 @@ export default function RegisterPage() {
                 Already have an account?{' '}
                 <button
                   type="button"
-                  onClick={() => router.push('/auth/login')}
+                  onClick={() => router.push('/login')}
                   className="font-medium text-indigo-600 hover:underline"
                 >
                   Sign in
