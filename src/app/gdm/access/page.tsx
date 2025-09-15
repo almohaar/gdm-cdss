@@ -4,8 +4,8 @@ import React from 'react';
 import Image from 'next/image';
 import { Resolver, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Info } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { FileText, Info, Sparkles, Activity } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,18 +13,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Toggle } from '@/components/ui/toggle';
 
 import DecisionSupportModal from '@/components/DecisionSupportModal';
 import { assessGDM, type GdmAssessmentResult } from '@/lib/validators/risk';
 import { GdmFormValues, gdmSchema } from '@/lib/validators/gdm';
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-};
-const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
+// Subtle motion helpers
+const fade = { hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } };
 
-export default function GdmAssessPage() {
+export default function GdmAssessPageRefactor() {
   const { register, handleSubmit, formState, watch, reset } =
     useForm<GdmFormValues>({
       resolver: zodResolver(gdmSchema) as unknown as Resolver<GdmFormValues>,
@@ -47,7 +45,9 @@ export default function GdmAssessPage() {
   const [open, setOpen] = React.useState(false);
   const [guideline, setGuideline] = React.useState<'WHO' | 'NICE'>('WHO');
 
-  // onRun gets properly typed from GdmFormValues; handleSubmit will accept it
+  // UI helpers
+  const [showLabs, setShowLabs] = React.useState(true);
+
   const onRun = (data: GdmFormValues) => {
     const input = {
       age: data.age,
@@ -77,65 +77,62 @@ export default function GdmAssessPage() {
   }, [height, weight]);
 
   return (
-    <div className="min-h-screen relative">
-      {/* Hero background */}
+    <div className="min-h-screen relative bg-gradient-to-b from-slate-50 to-white">
       <div className="absolute inset-0 -z-10">
         <Image
           src="/gdm-hero-2.jpg"
           alt="GDM hero"
           fill
-          className="object-cover opacity-40 blur-sm"
+          className="object-cover opacity-10 blur-md"
           priority
         />
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-12">
-        <motion.header
-          initial="hidden"
-          animate="show"
-          variants={container}
-          className="mb-8"
-        >
-          <motion.h1
-            variants={item}
-            className="text-3xl md:text-4xl font-extrabold text-slate-900"
+      <div className="max-w-5xl mx-auto px-6 py-12">
+        <header className="mb-8 flex items-start gap-6">
+          <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-white/60 flex items-center justify-center border">
+            <Sparkles className="w-7 h-7 text-slate-700" />
+          </div>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
+              Quick GDM risk check
+            </h1>
+            <p className="text-sm text-slate-600 mt-1 max-w-xl">
+              A simple, friendly form for clinicians or patients — enter a few
+              values and get an evidence-aligned recommendation. Optional fields
+              are tucked away so the form feels short.
+            </p>
+          </div>
+        </header>
+
+        <form onSubmit={handleSubmit(onRun)}>
+          <motion.div
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-3 gap-6"
           >
-            Gestational Diabetes — Risk Assessment
-          </motion.h1>
-          <motion.p variants={item} className="text-slate-600 mt-2 max-w-2xl">
-            Fast, auditable guidance aligned with WHO / NICE thresholds.
-            Complete the fields below and get an evidence-aligned decision and
-            recommended next steps.
-          </motion.p>
-        </motion.header>
-
-        <motion.main
-          initial="hidden"
-          animate="show"
-          variants={container}
-          className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-        >
-          {/* Left column — form inputs */}
-          <motion.section variants={item}>
-            <Card className="p-6 backdrop-blur bg-white/70 border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Patient details
-                  </h3>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Demographics & history
-                  </p>
-                </div>
-                <Info className="text-slate-400" />
-              </div>
-
-              <div className="mt-5 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+            {/* Left — essentials */}
+            <motion.section variants={fade} className="md:col-span-2">
+              <Card className="p-6 rounded-2xl shadow-sm">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <Label>Age (years)</Label>
+                    <h2 className="text-lg font-semibold">Patient details</h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Essentials only — simple inputs
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    <span>Fast & private</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Age</Label>
                     <Input
                       type="number"
+                      placeholder="e.g. 32"
                       {...register('age', { valueAsNumber: true })}
                       className="mt-1"
                     />
@@ -147,9 +144,10 @@ export default function GdmAssessPage() {
                   </div>
 
                   <div>
-                    <Label>Gestational age (weeks)</Label>
+                    <Label>Gestational age (weeks) — optional</Label>
                     <Input
                       type="number"
+                      placeholder="e.g. 28"
                       {...register('gestationalAgeWeeks', {
                         valueAsNumber: true,
                       })}
@@ -161,13 +159,12 @@ export default function GdmAssessPage() {
                       </p>
                     )}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Height (cm)</Label>
                     <Input
                       type="number"
+                      placeholder="e.g. 165"
                       {...register('heightCm', { valueAsNumber: true })}
                       className="mt-1"
                     />
@@ -177,10 +174,12 @@ export default function GdmAssessPage() {
                       </p>
                     )}
                   </div>
+
                   <div>
                     <Label>Weight (kg)</Label>
                     <Input
                       type="number"
+                      placeholder="e.g. 70"
                       {...register('weightKg', { valueAsNumber: true })}
                       className="mt-1"
                     />
@@ -192,9 +191,9 @@ export default function GdmAssessPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 items-end">
-                  <div className='mt-1'>
-                    <Label>Ethnicity risk</Label>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="mt-1">
+                    <Label>Ethnicity</Label>
                     <Select {...register('ethnicityRisk')}>
                       <option value="LOW">Lower risk</option>
                       <option value="HIGH">Higher risk</option>
@@ -202,112 +201,165 @@ export default function GdmAssessPage() {
                   </div>
 
                   <div>
-                    <Label className="mb-1">History</Label>
-                    <div className="flex gap-3">
+                    <Label>Known history</Label>
+                    <div className="flex gap-3 mt-2">
                       <label className="flex items-center gap-2">
                         <Checkbox {...register('historyGDM')} />
                         <span className="text-sm">Previous GDM</span>
                       </label>
                       <label className="flex items-center gap-2">
                         <Checkbox {...register('familyHistoryDM')} />
-                        <span className="text-sm">Family DM</span>
+                        <span className="text-sm">Family diabetes</span>
                       </label>
                     </div>
                   </div>
                 </div>
 
-                <div>
+                <div className="mt-4">
                   <Label>Systolic BP (mmHg) — optional</Label>
                   <Input
                     type="number"
+                    placeholder="e.g. 120"
                     {...register('systolicBP', { valueAsNumber: true })}
                     className="mt-1"
                   />
                 </div>
 
-                <div className="mt-2 text-xs text-slate-500">
-                  BMI: <span className="font-medium">{bmi ?? '—'}</span>
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-slate-600">BMI</div>
+                  <div className="text-lg font-semibold">{bmi ?? '—'}</div>
                 </div>
-              </div>
-            </Card>
-          </motion.section>
+              </Card>
 
-          {/* Middle column — labs */}
-          <motion.section variants={item}>
-            <Card className="p-6 backdrop-blur bg-white/75 border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Glucose measurements
-                  </h3>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Values in mmol/L (choose guideline from right column)
-                  </p>
-                </div>
-                <FileText className="text-slate-400" />
-              </div>
+              {/* Labs — collapsible-ish */}
+              <motion.div variants={fade} className="mt-4">
+                <Card className="p-4 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium">
+                        Glucose measurements
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Only fill if available — values in mmol/L
+                      </p>
+                    </div>
 
-              <div className="mt-5 space-y-4">
-                <div>
-                  <Label>Fasting plasma glucose</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    {...register('fastingGlucose', { valueAsNumber: true })}
-                    className="mt-1"
-                  />
-                  {formState.errors.fastingGlucose && (
-                    <p className="text-rose-600 text-sm mt-1">
-                      {String(formState.errors.fastingGlucose?.message)}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <Toggle
+                        pressed={showLabs}
+                        onPressedChange={() => setShowLabs(v => !v)}
+                      />
+                      <span className="text-xs text-slate-600">Show labs</span>
+                    </div>
+                  </div>
+
+                  {showLabs && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <Label>Fasting plasma glucose</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          placeholder="e.g. 5.3"
+                          {...register('fastingGlucose', {
+                            valueAsNumber: true,
+                          })}
+                          className="mt-1"
+                        />
+                        {formState.errors.fastingGlucose && (
+                          <p className="text-rose-600 text-sm mt-1">
+                            {String(formState.errors.fastingGlucose?.message)}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label>1-hour OGTT</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          placeholder="e.g. 11.2"
+                          {...register('ogtt1h', { valueAsNumber: true })}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label>2-hour OGTT</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          placeholder="e.g. 8.9"
+                          {...register('ogtt2h', { valueAsNumber: true })}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
                   )}
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>1-hour OGTT (optional)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      {...register('ogtt1h', { valueAsNumber: true })}
-                      className="mt-1"
-                    />
+                  <div className="mt-3 text-xs text-slate-600 bg-slate-50 p-2 rounded">
+                    WHO (2013): fasting ≥5.1, 1h ≥10.0, 2h ≥8.5. NICE uses
+                    different thresholds.
                   </div>
-                  <div>
-                    <Label>2-hour OGTT (optional)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      {...register('ogtt2h', { valueAsNumber: true })}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
+                </Card>
+              </motion.div>
 
-                <div className="mt-3 rounded-md p-3 bg-slate-50 text-sm text-slate-700 border">
-                  <div className="font-medium">Quick guidance</div>
-                  <div className="mt-1 text-xs text-slate-600">
-                    WHO 2013: FPG ≥5.1, 1-h ≥10.0, 2-h ≥8.5 — any one diagnostic
-                    for GDM. NICE uses different thresholds (select NICE to
-                    use).
-                  </div>
-                </div>
+              <div className="mt-4 flex gap-2">
+                <Button type="submit" size="lg" className="flex-1">
+                  Run assessment
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => reset()}
+                  className="w-36"
+                >
+                  Reset
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const sample: Partial<GdmFormValues> = {
+                      age: 32,
+                      heightCm: 165,
+                      weightKg: 78,
+                      gestationalAgeWeeks: 28,
+                      fastingGlucose: 5.3,
+                      ogtt1h: 11.2,
+                      ogtt2h: 8.9,
+                      historyGDM: false,
+                      familyHistoryDM: true,
+                      ethnicityRisk: 'HIGH',
+                      systolicBP: 120,
+                    };
+                    reset(sample as GdmFormValues);
+                  }}
+                >
+                  Example
+                </Button>
               </div>
-            </Card>
-          </motion.section>
+            </motion.section>
 
-          {/* Right column — actions & preview */}
-          <motion.section variants={item}>
-            <Card className="p-6 flex flex-col justify-between h-full backdrop-blur bg-white/80 border">
-              <div>
-                <div className="mb-3">
-                  <Label>Guideline</Label>
+            {/* Right — info card */}
+            <motion.aside variants={fade} className="space-y-4">
+              <Card className="p-4 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-semibold">Guideline</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Choose thresholds used to interpret labs
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3">
                   <select
                     value={guideline}
                     onChange={e =>
                       setGuideline(e.target.value as 'WHO' | 'NICE')
                     }
-                    className="mt-1 w-full border rounded px-3 py-2"
+                    className="w-full border rounded px-3 py-2"
                   >
                     <option value="WHO">
                       WHO / IADPSG (fasting ≥5.1, 1h ≥10.0, 2h ≥8.5)
@@ -318,74 +370,22 @@ export default function GdmAssessPage() {
                   </select>
                 </div>
 
-                <Button
-                  size="lg"
-                  className="w-full"
-                  onClick={handleSubmit(onRun)}
-                >
-                  Run assessment
-                </Button>
-                <p className="text-sm text-slate-600 mt-1">
-                  Review the inputs and run the decision support engine.
-                </p>
-
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-slate-600">Calculated BMI</div>
-                    <div className="font-semibold">{bmi ?? '—'}</div>
+                <div className="mt-4 text-sm">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>Calculated BMI</span>
+                    <span className="font-semibold">{bmi ?? '—'}</span>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-slate-600">Current GA</div>
-                    <div className="font-semibold">
+                  <div className="flex items-center justify-between text-slate-600 mt-2">
+                    <span>Current GA</span>
+                    <span className="font-semibold">
                       {watch('gestationalAgeWeeks') ?? '—'} wks
-                    </div>
-                  </div>
-
-                  <div className="pt-2" />
-
-                  <div className="pt-2">
-                    <Button
-                      variant="ghost"
-                      className="w-full"
-                      onClick={() => reset()}
-                    >
-                      Reset form
-                    </Button>
-                  </div>
-
-                  <div className="mt-4 text-xs text-slate-500">
-                    Results are advisory. Always combine with clinical judgement
-                    & local protocols.
+                    </span>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-6">
-                <div className="text-xs text-slate-500 mb-2">Shortcuts</div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const sample: Partial<GdmFormValues> = {
-                        age: 32,
-                        heightCm: 165,
-                        weightKg: 78,
-                        gestationalAgeWeeks: 28,
-                        fastingGlucose: 5.3,
-                        ogtt1h: 11.2,
-                        ogtt2h: 8.9,
-                        historyGDM: false,
-                        familyHistoryDM: true,
-                        ethnicityRisk: 'HIGH',
-                        systolicBP: 120,
-                      };
-                      reset(sample as GdmFormValues);
-                    }}
-                  >
-                    Use example
-                  </Button>
-
+                <div className="mt-4 flex flex-col gap-2">
+                  <Button onClick={handleSubmit(onRun)}>Run</Button>
                   <Button
                     variant="ghost"
                     onClick={() =>
@@ -395,22 +395,31 @@ export default function GdmAssessPage() {
                       )
                     }
                   >
-                    Read NICE guidance
+                    Read NICE
                   </Button>
                 </div>
-              </div>
-            </Card>
-          </motion.section>
-        </motion.main>
-      </div>
+              </Card>
 
-      <AnimatePresence>
+              <Card className="p-4 text-xs text-slate-600">
+                <div className="font-medium mb-1">Hints for patients</div>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>Use one decimal for glucose (e.g. 5.3)</li>
+                  <li>Leave optional fields blank if unknown</li>
+                  <li>
+                    If unsure, ask your clinician to help interpret results
+                  </li>
+                </ul>
+              </Card>
+            </motion.aside>
+          </motion.div>
+        </form>
+
         <DecisionSupportModal
           open={open}
           result={result}
           onCloseAction={() => setOpen(false)}
         />
-      </AnimatePresence>
+      </div>
     </div>
   );
 }
