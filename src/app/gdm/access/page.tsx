@@ -2,15 +2,10 @@
 
 import React from 'react';
 import Image from 'next/image';
-import { useForm } from 'react-hook-form';
+import { Resolver, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, Info } from 'lucide-react';
-
-import {
-  gdmAssessmentSchema,
-  type GdmAssessmentInput,
-} from '@/lib/validators/gdm';
 
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,7 +15,8 @@ import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 
 import DecisionSupportModal from '@/components/DecisionSupportModal';
-import { assessGDM } from '../../../lib/validators/risk';
+import { assessGDM, type GdmAssessmentResult } from '@/lib/validators/risk';
+import { GdmFormValues, gdmSchema } from '@/lib/validators/gdm';
 
 const container = {
   hidden: { opacity: 0 },
@@ -29,29 +25,45 @@ const container = {
 const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
 
 export default function GdmAssessPage() {
-  // use the schema type directly
   const { register, handleSubmit, formState, watch, reset } =
-    useForm<GdmAssessmentInput>({
-      resolver: zodResolver(gdmAssessmentSchema),
+    useForm<GdmFormValues>({
+      resolver: zodResolver(gdmSchema) as unknown as Resolver<GdmFormValues>,
       defaultValues: {
-        age: 18,
-        heightCm: 24,
-        ethnicityRisk: 'LOW',
+        age: 30,
+        heightCm: 165,
+        weightKg: 70,
+        gestationalAgeWeeks: undefined,
+        fastingGlucose: undefined,
+        ogtt1h: undefined,
+        ogtt2h: undefined,
         historyGDM: false,
         familyHistoryDM: false,
-        ogtt1h: null,
-        ogtt2h: null,
-        systolicBP: null,
+        ethnicityRisk: 'LOW',
+        systolicBP: undefined,
       },
     });
 
-  const [result, setResult] = React.useState<ReturnType<
-    typeof assessGDM
-  > | null>(null);
+  const [result, setResult] = React.useState<GdmAssessmentResult | null>(null);
   const [open, setOpen] = React.useState(false);
+  const [guideline, setGuideline] = React.useState<'WHO' | 'NICE'>('WHO');
 
-  const onSubmit = (data: GdmAssessmentInput) => {
-    const r = assessGDM(data);
+  // onRun gets properly typed from GdmFormValues; handleSubmit will accept it
+  const onRun = (data: GdmFormValues) => {
+    const input = {
+      age: data.age,
+      heightCm: data.heightCm,
+      weightKg: data.weightKg,
+      gestationalAgeWeeks: data.gestationalAgeWeeks ?? undefined,
+      fastingGlucose: data.fastingGlucose ?? undefined,
+      ogtt1h: data.ogtt1h ?? undefined,
+      ogtt2h: data.ogtt2h ?? undefined,
+      historyGDM: data.historyGDM,
+      familyHistoryDM: data.familyHistoryDM,
+      ethnicityRisk: data.ethnicityRisk,
+      systolicBP: data.systolicBP ?? undefined,
+    };
+
+    const r = assessGDM(input, { guideline });
     setResult(r);
     setOpen(true);
   };
@@ -91,9 +103,9 @@ export default function GdmAssessPage() {
             Gestational Diabetes — Risk Assessment
           </motion.h1>
           <motion.p variants={item} className="text-slate-600 mt-2 max-w-2xl">
-            Fast, auditable guidance aligned with WHO thresholds. Complete the
-            fields below and get an evidence-aligned decision and recommended
-            next steps.
+            Fast, auditable guidance aligned with WHO / NICE thresholds.
+            Complete the fields below and get an evidence-aligned decision and
+            recommended next steps.
           </motion.p>
         </motion.header>
 
@@ -159,6 +171,11 @@ export default function GdmAssessPage() {
                       {...register('heightCm', { valueAsNumber: true })}
                       className="mt-1"
                     />
+                    {formState.errors.heightCm && (
+                      <p className="text-rose-600 text-sm mt-1">
+                        {String(formState.errors.heightCm?.message)}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label>Weight (kg)</Label>
@@ -167,11 +184,16 @@ export default function GdmAssessPage() {
                       {...register('weightKg', { valueAsNumber: true })}
                       className="mt-1"
                     />
+                    {formState.errors.weightKg && (
+                      <p className="text-rose-600 text-sm mt-1">
+                        {String(formState.errors.weightKg?.message)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 items-end">
-                  <div>
+                  <div className='mt-1'>
                     <Label>Ethnicity risk</Label>
                     <Select {...register('ethnicityRisk')}>
                       <option value="LOW">Lower risk</option>
@@ -219,7 +241,7 @@ export default function GdmAssessPage() {
                     Glucose measurements
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Values in mmol/L (WHO 2013 thresholds used)
+                    Values in mmol/L (choose guideline from right column)
                   </p>
                 </div>
                 <FileText className="text-slate-400" />
@@ -266,7 +288,8 @@ export default function GdmAssessPage() {
                   <div className="font-medium">Quick guidance</div>
                   <div className="mt-1 text-xs text-slate-600">
                     WHO 2013: FPG ≥5.1, 1-h ≥10.0, 2-h ≥8.5 — any one diagnostic
-                    for GDM.
+                    for GDM. NICE uses different thresholds (select NICE to
+                    use).
                   </div>
                 </div>
               </div>
@@ -277,9 +300,31 @@ export default function GdmAssessPage() {
           <motion.section variants={item}>
             <Card className="p-6 flex flex-col justify-between h-full backdrop-blur bg-white/80 border">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">
+                <div className="mb-3">
+                  <Label>Guideline</Label>
+                  <select
+                    value={guideline}
+                    onChange={e =>
+                      setGuideline(e.target.value as 'WHO' | 'NICE')
+                    }
+                    className="mt-1 w-full border rounded px-3 py-2"
+                  >
+                    <option value="WHO">
+                      WHO / IADPSG (fasting ≥5.1, 1h ≥10.0, 2h ≥8.5)
+                    </option>
+                    <option value="NICE">
+                      NICE NG3 (fasting ≥5.6 OR 2h ≥7.8)
+                    </option>
+                  </select>
+                </div>
+
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={handleSubmit(onRun)}
+                >
                   Run assessment
-                </h3>
+                </Button>
                 <p className="text-sm text-slate-600 mt-1">
                   Review the inputs and run the decision support engine.
                 </p>
@@ -297,15 +342,7 @@ export default function GdmAssessPage() {
                     </div>
                   </div>
 
-                  <div className="pt-2">
-                    {/* <Button
-                      size="lg"
-                      className="w-full"
-                      onClick={handleSubmit(onSubmit)}
-                    >
-                      Run assessment
-                    </Button> */}
-                  </div>
+                  <div className="pt-2" />
 
                   <div className="pt-2">
                     <Button
@@ -330,8 +367,7 @@ export default function GdmAssessPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      const sample: GdmAssessmentInput = {
-                        // patientName: 'Jane Doe',
+                      const sample: Partial<GdmFormValues> = {
                         age: 32,
                         heightCm: 165,
                         weightKg: 78,
@@ -344,7 +380,7 @@ export default function GdmAssessPage() {
                         ethnicityRisk: 'HIGH',
                         systolicBP: 120,
                       };
-                      reset(sample);
+                      reset(sample as GdmFormValues);
                     }}
                   >
                     Use example
@@ -372,7 +408,7 @@ export default function GdmAssessPage() {
         <DecisionSupportModal
           open={open}
           result={result}
-          onClose={() => setOpen(false)}
+          onCloseAction={() => setOpen(false)}
         />
       </AnimatePresence>
     </div>

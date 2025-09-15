@@ -1,136 +1,223 @@
-// lib/gdm/risk.ts
-import type { GdmAssessmentInput } from '@/lib/validators/gdm';
-
-export type DecisionResult = {
-  score: number; // 0-100
-  band: 'LOW' | 'MODERATE' | 'HIGH';
-  color: 'green' | 'amber' | 'red';
-  lcd: 'Low risk' | 'Consider diagnostic testing' | 'Diagnostic for GDM';
-  reasons: string[];
-  bmi: number;
-  flags: {
-    meetsWHO: boolean;
-    borderlineWHO: boolean;
-  };
+// lib/validators/risk.ts
+export type GdmAssessmentInput = {
+  age?: number | null;
+  gestationalAgeWeeks?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  ethnicityRisk?: 'LOW' | 'HIGH';
+  historyGDM?: boolean;
+  familyHistoryDM?: boolean;
+  fastingGlucose?: number | null; // mmol/L
+  ogtt1h?: number | null; // mmol/L
+  ogtt2h?: number | null; // mmol/L
+  systolicBP?: number | null;
 };
 
-export function calcBMI(heightCm: number, weightKg: number) {
-  const h = heightCm / 100;
-  return +(weightKg / (h * h)).toFixed(1);
-}
+export type GdmAssessmentResult = {
+  diagnostic: 'GDM' | 'NO_GDM' | 'INDETERMINATE';
+  diagnosticCriteria: {
+    fasting?: boolean;
+    ogtt1h?: boolean;
+    ogtt2h?: boolean;
+    // note: for NICE the ogtt1h will be undefined/unused
+  };
+  riskScore: number; // 0..100
+  riskLevel: 'LOW' | 'MODERATE' | 'HIGH';
+  recommendations: string[];
+  explanation: string[]; // human-readable lines explaining what happened
+  references: { title: string; url: string }[]; // NICE / WHO links
+  guidelineUsed: 'WHO' | 'NICE';
+};
 
-export function assessGDM(input: GdmAssessmentInput): DecisionResult {
-  const reasons: string[] = [];
-  const bmi = calcBMI(input.heightCm, input.weightKg);
-  let score = 0;
+export function assessGDM(
+  input: GdmAssessmentInput,
+  opts?: { guideline?: 'WHO' | 'NICE' },
+): GdmAssessmentResult {
+  const guideline = opts?.guideline ?? 'WHO';
 
-  // WHO 2013 diagnostic thresholds (any one is diagnostic)
-  const meetsWHO =
-    input.fastingGlucose >= 5.1 ||
-    (!!input.ogtt1h && input.ogtt1h >= 10.0) ||
-    (!!input.ogtt2h && input.ogtt2h >= 8.5);
+  // thresholds
+  const THRESHOLDS =
+    guideline === 'WHO'
+      ? { fasting: 5.1, ogtt1h: 10.0, ogtt2h: 8.5 }
+      : { fasting: 5.6, ogtt1h: undefined, ogtt2h: 7.8 }; // NICE: 1h not diagnostic
 
-  const borderlineWHO =
-    (input.fastingGlucose >= 4.8 && input.fastingGlucose < 5.1) ||
-    (!!input.ogtt2h && input.ogtt2h >= 8.2 && input.ogtt2h < 8.5);
+  const references =
+    guideline === 'WHO'
+      ? [
+          {
+            title: 'WHO 2013 diagnostic criteria',
+            url: 'https://www.who.int/publications/i/item/9789241506024',
+          },
+        ]
+      : [
+          {
+            title: 'NICE NG3 — Diabetes in pregnancy',
+            url: 'https://www.nice.org.uk/guidance/ng3',
+          },
+        ];
 
-  // Base points from glucose
-  if (input.fastingGlucose >= 5.6) {
-    score += 70;
-    reasons.push(`Fasting glucose ${input.fastingGlucose} mmol/L (≥ 5.6)`);
-  } else if (input.fastingGlucose >= 5.1) {
-    score += 60;
-    reasons.push(`Fasting glucose ${input.fastingGlucose} mmol/L (≥ 5.1)`);
-  } else if (input.fastingGlucose >= 4.8) {
-    score += 25;
-    reasons.push(`Fasting glucose ${input.fastingGlucose} mmol/L (4.8–5.0)`);
-  }
+  const explanation: string[] = [];
+  const recs: string[] = [];
+  const criteria: Record<string, boolean | undefined> = {};
 
-  if (input.ogtt1h != null) {
-    if (input.ogtt1h >= 10.0) {
-      score += 60;
-      reasons.push(`1-h OGTT ${input.ogtt1h} mmol/L (≥ 10.0)`);
-    } else if (input.ogtt1h >= 9.0) {
-      score += 30;
-      reasons.push(`1-h OGTT ${input.ogtt1h} mmol/L (9.0–9.9)`);
-    }
-  }
+  // normalize labs
+  const fasting =
+    typeof input.fastingGlucose === 'number' ? input.fastingGlucose : null;
+  const ogtt1h = typeof input.ogtt1h === 'number' ? input.ogtt1h : null;
+  const ogtt2h = typeof input.ogtt2h === 'number' ? input.ogtt2h : null;
 
-  if (input.ogtt2h != null) {
-    if (input.ogtt2h >= 9.0) {
-      score += 60;
-      reasons.push(`2-h OGTT ${input.ogtt2h} mmol/L (≥ 9.0)`);
-    } else if (input.ogtt2h >= 8.5) {
-      score += 50;
-      reasons.push(`2-h OGTT ${input.ogtt2h} mmol/L (≥ 8.5)`);
-    } else if (input.ogtt2h >= 8.2) {
-      score += 25;
-      reasons.push(`2-h OGTT ${input.ogtt2h} mmol/L (8.2–8.49)`);
-    }
-  }
-
-  // Demographic & history modifiers
-  if (input.age >= 35) {
-    score += 10;
-    reasons.push(`Age ${input.age} (≥ 35)`);
-  }
-  if (bmi >= 30) {
-    score += 20;
-    reasons.push(`BMI ${bmi} (obesity)`);
-  } else if (bmi >= 25) {
-    score += 10;
-    reasons.push(`BMI ${bmi} (overweight)`);
-  }
-
-  if (input.historyGDM) {
-    score += 15;
-    reasons.push('Previous GDM');
-  }
-  if (input.familyHistoryDM) {
-    score += 10;
-    reasons.push('Family history of diabetes');
-  }
-  if (input.ethnicityRisk === 'HIGH') {
-    score += 10;
-    reasons.push('Higher-risk ethnicity');
-  }
-
-  // Gestational age context (encourage OGTT timing ≥24 weeks)
-  if (input.gestationalAgeWeeks < 24 && !meetsWHO) {
-    reasons.push(
-      `Early gestation (${input.gestationalAgeWeeks} weeks) — consider retesting at 24–28 weeks if screening`,
+  // Evaluate criteria according to guideline
+  if (fasting !== null) {
+    criteria.fasting = fasting >= (THRESHOLDS.fasting as number);
+    explanation.push(
+      `Fasting: ${fasting} mmol/L (threshold ${THRESHOLDS.fasting} per ${guideline}).`,
     );
+  } else {
+    explanation.push('Fasting glucose: not provided.');
   }
 
-  // Cap
+  if (guideline === 'WHO') {
+    if (ogtt1h !== null) {
+      criteria.ogtt1h = ogtt1h >= (THRESHOLDS.ogtt1h as number);
+      explanation.push(
+        `1-h OGTT: ${ogtt1h} mmol/L (threshold ${THRESHOLDS.ogtt1h}).`,
+      );
+    } else {
+      explanation.push('1-h OGTT: not provided.');
+    }
+  }
+
+  if (ogtt2h !== null) {
+    criteria.ogtt2h = ogtt2h >= (THRESHOLDS.ogtt2h as number);
+    explanation.push(
+      `2-h OGTT: ${ogtt2h} mmol/L (threshold ${THRESHOLDS.ogtt2h}).`,
+    );
+  } else {
+    explanation.push('2-h OGTT: not provided.');
+  }
+
+  // Diagnostic logic:
+  // WHO/IADPSG: any one of fasting/1h/2h above threshold => GDM.
+  // NICE: fasting >=5.6 OR 2h >=7.8 => GDM (1h not used).
+  let anyDiagnostic = false;
+  if (guideline === 'WHO') {
+    anyDiagnostic = !!(criteria.fasting || criteria.ogtt1h || criteria.ogtt2h);
+  } else {
+    // NICE
+    anyDiagnostic = !!(criteria.fasting || criteria.ogtt2h);
+  }
+
+  let diagnostic: GdmAssessmentResult['diagnostic'] = 'INDETERMINATE';
+  const anyLabProvided = fasting !== null || ogtt1h !== null || ogtt2h !== null;
+  if (!anyLabProvided) diagnostic = 'INDETERMINATE';
+  else diagnostic = anyDiagnostic ? 'GDM' : 'NO_GDM';
+
+  // risk scoring heuristic (transparent, tunable)
+  let score = 0;
+  // age
+  if (input.age && input.age >= 35) score += 18;
+  else if (input.age && input.age >= 30) score += 8;
+
+  // BMI
+  let bmi: number | null = null;
+  if (input.heightCm && input.weightKg) {
+    const h = input.heightCm / 100;
+    const b = input.weightKg / (h * h);
+    if (Number.isFinite(b)) {
+      bmi = Math.round(b * 10) / 10;
+      if (b >= 30) score += 20;
+      else if (b >= 25) score += 8;
+    }
+  }
+
+  // ethnicity, history, family
+  if (input.ethnicityRisk === 'HIGH') score += 10;
+  if (input.historyGDM) score += 25;
+  if (input.familyHistoryDM) score += 8;
+  if (input.systolicBP && input.systolicBP >= 140) score += 6;
+
+  // labs proximity scoring helper
+  function proximityScore(value: number | null, threshold?: number) {
+    if (typeof threshold !== 'number' || value === null) return 0;
+    if (value >= threshold) return 50;
+    const pct = value / threshold;
+    if (pct >= 0.9) return 20;
+    return 5;
+  }
+
+  score += proximityScore(fasting, THRESHOLDS.fasting);
+  // add 1h only for WHO
+  if (guideline === 'WHO') score += proximityScore(ogtt1h, THRESHOLDS.ogtt1h);
+  score += proximityScore(ogtt2h, THRESHOLDS.ogtt2h);
+
+  // clamp
   if (score > 100) score = 100;
+  if (score < 0) score = 0;
+  const riskScore = Math.round(score);
 
-  // Band + color + LCD label
-  let band: DecisionResult['band'] = 'LOW';
-  let color: DecisionResult['color'] = 'green';
-  let lcd: DecisionResult['lcd'] = 'Low risk';
+  let riskLevel: GdmAssessmentResult['riskLevel'] = 'LOW';
+  if (riskScore >= 65) riskLevel = 'HIGH';
+  else if (riskScore >= 30) riskLevel = 'MODERATE';
 
-  if (meetsWHO) {
-    band = 'HIGH';
-    color = 'red';
-    lcd = 'Diagnostic for GDM';
-  } else if (score >= 50) {
-    band = 'HIGH';
-    color = 'red';
-    lcd = 'Consider diagnostic testing'; // high risk but not meeting WHO explicitly
-  } else if (score >= 20 || borderlineWHO) {
-    band = 'MODERATE';
-    color = 'amber';
-    lcd = 'Consider diagnostic testing';
+  // recommendations
+  if (diagnostic === 'GDM') {
+    recs.push(
+      `${guideline} criteria met — treat as gestational diabetes (advise management pathway).`,
+    );
+    recs.push(
+      'Initiate structured care: diet and physical activity advice, SMBG (targets per local guidance), consider specialist referral.',
+    );
+    recs.push(
+      'If glycaemic targets not achieved with lifestyle, consider pharmacotherapy (metformin/insulin) according to local protocols.',
+    );
+  } else if (diagnostic === 'NO_GDM') {
+    recs.push(
+      'No diagnostic glucose value reached the selected guideline thresholds.',
+    );
+    const ga = input.gestationalAgeWeeks ?? null;
+    if (ga === null || ga < 24) {
+      recs.push(
+        'If <24 weeks and high risk, consider early testing and repeat OGTT at 24–28 weeks.',
+      );
+    } else {
+      recs.push(
+        'Follow routine screening or repeat per local protocol (usually 24–28 weeks).',
+      );
+    }
+    if (riskLevel === 'HIGH')
+      recs.push(
+        'High-risk features present — consider closer monitoring and lifestyle intervention.',
+      );
+    else recs.push('Advise lifestyle modification and routine antenatal care.');
+  } else {
+    recs.push(
+      'No diagnostic labs provided — perform OGTT (fasting + 2-hour) or at least fasting glucose.',
+    );
+    if (input.gestationalAgeWeeks && input.gestationalAgeWeeks < 24) {
+      recs.push(
+        'If high-risk and <24 weeks, do early testing and repeat at 24–28 weeks.',
+      );
+    } else recs.push('Arrange testing at 24–28 weeks if not already done.');
   }
+
+  // compose explanation list
+  explanation.unshift(
+    `Computed risk score: ${riskScore} (level: ${riskLevel}).`,
+  );
+  if (bmi !== null) explanation.push(`BMI: ${bmi} kg/m².`);
 
   return {
-    score,
-    band,
-    color,
-    lcd,
-    reasons,
-    bmi,
-    flags: { meetsWHO, borderlineWHO },
+    diagnostic,
+    diagnosticCriteria: {
+      fasting: criteria.fasting,
+      ogtt1h: criteria.ogtt1h,
+      ogtt2h: criteria.ogtt2h,
+    },
+    riskScore,
+    riskLevel,
+    recommendations: recs,
+    explanation,
+    references,
+    guidelineUsed: guideline,
   };
 }
