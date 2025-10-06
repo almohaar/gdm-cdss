@@ -68,6 +68,13 @@ export default function GdmAssessPageRefactor() {
     setOpen(true);
   };
 
+  const doReset = (values?: Partial<GdmFormValues>) => {
+    reset(values ?? undefined);
+    // close modal and clear previous result
+    setOpen(false);
+    setResult(null);
+  };
+
   const height = watch('heightCm');
   const weight = watch('weightKg');
   const bmi = React.useMemo(() => {
@@ -311,7 +318,7 @@ export default function GdmAssessPageRefactor() {
 
                 <Button
                   variant="ghost"
-                  onClick={() => reset()}
+                  onClick={() => doReset}
                   className="w-36"
                 >
                   Reset
@@ -333,7 +340,7 @@ export default function GdmAssessPageRefactor() {
                       ethnicityRisk: 'HIGH',
                       systolicBP: 120,
                     };
-                    reset(sample as GdmFormValues);
+                    doReset(sample as GdmFormValues);
                   }}
                 >
                   Example

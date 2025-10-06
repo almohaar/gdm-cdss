@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Check } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -22,20 +22,25 @@ import {
 import { RegisterInput, registerSchema } from '@/lib/validators/authSchemas';
 import { createClient } from '../../../lib/supabase/client';
 import { toast } from 'sonner';
-// import { supabaseBrowser } from '@/lib/supabase/client';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, handleSubmit, formState, control } = useForm<RegisterInput>(
-    {
+  const { register, handleSubmit, formState, control, reset, watch } =
+    useForm<RegisterInput>({
       resolver: zodResolver(registerSchema),
       defaultValues: { role: 'PATIENT' as const },
-    },
-  );
+    });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [submittingState, setSubmittingState] = useState({
+    loading: false,
+    success: false,
+  });
+
+  const watchedRole = watch('role');
 
   const onSubmit = async (data: RegisterInput) => {
+    setSubmittingState({ loading: true, success: false });
     try {
       const supabase = createClient();
 
@@ -45,12 +50,13 @@ export default function RegisterPage() {
       });
 
       if (error) {
-        toast.error(error.message);
+        toast.error(error.message || 'Signup error');
+        setSubmittingState({ loading: false, success: false });
         return;
       }
 
       // Insert into profiles
-      if (signUpData.user) {
+      if (signUpData?.user) {
         const { error: profileError } = await supabase.from('profiles').insert({
           id: signUpData.user.id,
           name: data.name,
@@ -60,66 +66,82 @@ export default function RegisterPage() {
         if (profileError) {
           console.error(profileError);
           toast.error('Failed to save profile');
+          setSubmittingState({ loading: false, success: false });
           return;
         }
       }
 
-      toast.success("Registered Successfully!")
+      toast.success('Registered successfully — check your email to confirm.');
+      setSubmittingState({ loading: false, success: true });
 
-      // Redirect by role
-      if (data.role === 'CLINICIAN') router.push('/gdm/access');
-      else if (data.role === 'ADMIN') router.push('/gdm/access');
-      else router.push('/gdm/access');
-
+      // Clear form (gentle feedback) and redirect by role
+      reset();
+      // Note: all roles currently go to /gdm/access — keep here for future role splits
+      router.push('/gdm/access');
     } catch (err) {
       console.error(err);
-      toast.error('Registration failed');
+      toast.error('Registration failed — please try again.');
+      setSubmittingState({ loading: false, success: false });
     }
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 px-4 sm:px-6 lg:px-8">
-      {/* Background overlay */}
-      <div className="absolute inset-0">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#F6D6E0] via-[#FFF6EA] to-[#DCEFF0] px-4 sm:px-6 lg:px-8">
+      {/* Soft background illustration (decorative) */}
+      <div className="absolute inset-0 pointer-events-none">
         <Image
-          src="/auth-hero.webp"
-          alt="Background"
+          src="/auth-hero-new.jpg"
+          alt="Soft pastel abstract background showing gentle curves"
           fill
-          className="object-cover filter blur-sm brightness-75"
+          className="object-cover "
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/80" />
+        {/* <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/70" /> */}
       </div>
 
-      {/* Animated Card */}
+      {/* Animated form container */}
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.5 }}
         className="relative w-full max-w-xl px-6"
       >
-        <Card className="bg-white/90 dark:bg-slate-900/80 border border-white/20 shadow-2xl backdrop-blur-xl rounded-2xl">
-          <CardHeader className="text-center space-y-2">
-            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
+        <Card className="bg-white/95 border border-white/30 shadow-xl backdrop-blur-lg rounded-2xl">
+          <CardHeader className="text-center space-y-2 py-6 px-6">
+            <CardTitle className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-[#8FD3C7] via-[#DCCBF6] to-[#F6D6E0] bg-clip-text text-transparent">
               Create an Account
             </CardTitle>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Secure, auditable and guideline-aligned support for clinicians and
-              patients.
+            <p className="text-sm text-slate-700 max-w-prose mx-auto">
+              A gentle, guideline-aligned care experience — for patients and
+              clinicians.
             </p>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+
+          <CardContent className="px-6 pb-8">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="space-y-5"
+              aria-live="polite"
+            >
               {/* Full name */}
               <div>
-                <Label>Full name</Label>
+                <Label htmlFor="name">Full name</Label>
                 <Input
+                  id="name"
                   {...register('name')}
                   placeholder="Jane Doe"
                   className="mt-1"
+                  aria-invalid={!!formState.errors.name}
+                  aria-describedby={
+                    formState.errors.name ? 'name-error' : undefined
+                  }
                 />
                 {formState.errors.name && (
-                  <p className="text-rose-600 text-sm mt-1">
+                  <p
+                    id="name-error"
+                    className="text-rose-600 text-sm mt-1"
+                    role="alert"
+                  >
                     {String(formState.errors.name?.message)}
                   </p>
                 )}
@@ -127,15 +149,28 @@ export default function RegisterPage() {
 
               {/* Email */}
               <div>
-                <Label>Email</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
+                  id="email"
                   {...register('email')}
                   type="email"
                   placeholder="you@example.com"
                   className="mt-1"
+                  aria-invalid={!!formState.errors.email}
+                  aria-describedby={
+                    formState.errors.email ? 'email-error' : 'email-help'
+                  }
                 />
+                <p id="email-help" className="text-xs text-slate-600 mt-1">
+                  We'll never share your email. Used for account sign-in and
+                  notifications.
+                </p>
                 {formState.errors.email && (
-                  <p className="text-rose-600 text-sm mt-1">
+                  <p
+                    id="email-error"
+                    className="text-rose-600 text-sm mt-1"
+                    role="alert"
+                  >
                     {String(formState.errors.email?.message)}
                   </p>
                 )}
@@ -143,22 +178,44 @@ export default function RegisterPage() {
 
               {/* Password with toggle */}
               <div className="relative">
-                <Label>Password</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input
+                  id="password"
                   {...register('password')}
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder="Create a strong password"
                   className="mt-1 pr-10"
+                  aria-invalid={!!formState.errors.password}
+                  aria-describedby={
+                    formState.errors.password
+                      ? 'password-error'
+                      : 'password-help'
+                  }
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 bottom-2.5 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  className="absolute right-3 bottom-2.5 text-slate-500 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#8FD3C7] rounded"
                 >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  {showPassword ? (
+                    <EyeOff size={18} aria-hidden />
+                  ) : (
+                    <Eye size={18} aria-hidden />
+                  )}
                 </button>
+
+                <p id="password-help" className="text-xs text-slate-600 mt-1">
+                  Use at least 8 characters — mix letters and numbers for
+                  safety.
+                </p>
                 {formState.errors.password && (
-                  <p className="text-rose-600 text-sm mt-1">
+                  <p
+                    id="password-error"
+                    className="text-rose-600 text-sm mt-1"
+                    role="alert"
+                  >
                     {String(formState.errors.password?.message)}
                   </p>
                 )}
@@ -166,7 +223,7 @@ export default function RegisterPage() {
 
               {/* Role (Shadcn Select) */}
               <div>
-                <Label>Role</Label>
+                <Label htmlFor="role">Role</Label>
                 <Controller
                   name="role"
                   control={control}
@@ -176,7 +233,11 @@ export default function RegisterPage() {
                         value={field.value}
                         onValueChange={field.onChange}
                       >
-                        <SelectTrigger className="w-full mt-1">
+                        <SelectTrigger
+                          id="role"
+                          className="w-full mt-1"
+                          aria-label="Select role"
+                        >
                           <SelectValue placeholder="Select a role" />
                         </SelectTrigger>
                         <SelectContent>
@@ -185,32 +246,77 @@ export default function RegisterPage() {
                           <SelectItem value="ADMIN">Admin</SelectItem>
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Selecting 'Clinician' or 'Admin' enables professional
+                        features.
+                      </p>
                       {fieldState.error && (
-                        <p className="text-rose-600 text-sm mt-1">
+                        <p className="text-rose-600 text-sm mt-1" role="alert">
                           {fieldState.error.message}
                         </p>
                       )}
                     </>
                   )}
                 />
+
+                {/* contextual hint for patients */}
+                {watchedRole === 'PATIENT' && (
+                  <div className="mt-2 text-sm text-slate-700 bg-[#FFF6EA] p-3 rounded-lg border">
+                    Welcome — as a patient you'll get tailored recommendations
+                    and reminders.
+                  </div>
+                )}
               </div>
 
               {/* Submit */}
               <Button
                 type="submit"
-                disabled={formState.isSubmitting}
-                className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:opacity-90 transition-all duration-200"
+                disabled={formState.isSubmitting || submittingState.loading}
+                className="w-full rounded-full bg-gradient-to-r from-[#8FD3C7] via-[#DCCBF6] to-[#F6D6E0] hover:opacity-95 transition-all duration-200"
+                aria-live="polite"
               >
-                {formState.isSubmitting ? 'Creating...' : 'Register'}
+                {submittingState.loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg
+                      className="h-4 w-4 animate-spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeOpacity="0.2"
+                      ></circle>
+                      <path
+                        d="M22 12a10 10 0 00-10-10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                      ></path>
+                    </svg>
+                    Creating...
+                  </span>
+                ) : submittingState.success ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Check size={16} aria-hidden />
+                    Registered
+                  </span>
+                ) : (
+                  'Register'
+                )}
               </Button>
 
               {/* Redirect to login */}
-              <div className="text-center text-sm text-slate-600 dark:text-slate-400 mt-3">
+              <div className="text-center text-sm text-slate-700 mt-3">
                 Already have an account?{' '}
                 <button
                   type="button"
                   onClick={() => router.push('/login')}
-                  className="font-medium text-indigo-600 hover:underline"
+                  className="font-medium text-[#8FD3C7] hover:underline"
                 >
                   Sign in
                 </button>
